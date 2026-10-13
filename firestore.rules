@@ -1,0 +1,56 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Profils utilisateurs
+    match /users/{userId} {
+
+      // Création du profil personnel
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.keys().hasAll([
+                      'nom', 'prenom', 'age', 'email',
+                      'photo', 'role', 'actif', 'createdAt'
+                    ])
+                    && request.resource.data.keys().hasOnly([
+                      'nom', 'prenom', 'age', 'email',
+                      'photo', 'role', 'actif', 'createdAt'
+                    ])
+                    && request.resource.data.role == 'user'
+                    && request.resource.data.actif == true
+                    && request.resource.data.email == request.auth.token.email;
+
+      // Lecture de son propre profil
+      allow read: if request.auth != null
+                  && request.auth.uid == userId;
+
+      // Modification des informations personnelles uniquement
+      allow update: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.diff(resource.data)
+                       .affectedKeys()
+                       .hasOnly(['nom', 'prenom', 'age', 'photo']);
+
+      // Aucun utilisateur ne peut supprimer un profil
+      allow delete: if false;
+
+      // Favoris personnels
+      match /favorites/{movieId} {
+        allow read, create, update, delete:
+          if request.auth != null
+          && request.auth.uid == userId;
+      }
+    }
+
+    // Catalogue des films
+    match /movies/{movieId} {
+      allow read: if true;
+
+      // Écriture réservée aux administrateurs autorisés
+      allow write: if request.auth != null
+                   && request.auth.token.admin == true;
+    }
+  }
+}

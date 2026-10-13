@@ -1,0 +1,422 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>MovieMatch</title>
+
+    <!-- Ionic Core -->
+    <script
+        type="module"
+        src="https://cdn.jsdelivr.net/npm/@ionic/core/dist/ionic/ionic.esm.js">
+    </script>
+
+    <script
+        nomodule
+        src="https://cdn.jsdelivr.net/npm/@ionic/core/dist/ionic/ionic.js">
+    </script>
+
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/@ionic/core/css/ionic.bundle.css">
+
+    <!-- CSS du projet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <ion-app>
+
+        <!-- En-tête -->
+        <ion-header>
+            <ion-toolbar color="dark">
+                <ion-title>MovieMatch 🎬</ion-title>
+            </ion-toolbar>
+        </ion-header>
+
+        <ion-content class="ion-padding">
+
+            <!-- ================= ACCUEIL ================= -->
+            <section id="accueil">
+
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>
+                            Bienvenue sur MovieMatch 🎬
+                        </ion-card-title>
+
+                        <ion-card-subtitle>
+                            Découvre ton prochain film préféré !
+                        </ion-card-subtitle>
+                    </ion-card-header>
+
+                    <ion-card-content>
+                        <p>
+                            Trouve tes films préférés et crée ta playlist.
+                        </p>
+
+                        <ion-button id="btn-connexion" expand="block">
+                            Se connecter
+                        </ion-button>
+
+                        <ion-button
+                            id="btn-inscription"
+                            expand="block"
+                            fill="outline">
+                            Créer un compte
+                        </ion-button>
+
+                        <ion-button
+                            id="btn-films"
+                            expand="block"
+                            color="secondary">
+                            Découvrir les films
+                        </ion-button>
+                    </ion-card-content>
+                </ion-card>
+
+            </section>
+
+
+            <!-- ================= CONNEXION ================= -->
+            <section id="connexion" hidden>
+
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>
+                            Se connecter
+                        </ion-card-title>
+                    </ion-card-header>
+
+                    <ion-card-content>
+
+                        <ion-input
+                            id="email"
+                            type="email"
+                            label="Email"
+                            label-placement="floating">
+                        </ion-input>
+
+                        <ion-input
+                            id="mot-de-passe"
+                            type="password"
+                            label="Mot de passe"
+                            label-placement="floating">
+                        </ion-input>
+
+                        <ion-button id="btn-login" expand="block">
+                            Connexion
+                        </ion-button>
+
+                        <ion-button
+                            id="btn-retour-connexion"
+                            expand="block"
+                            fill="clear">
+                            Retour
+                        </ion-button>
+
+                    </ion-card-content>
+                </ion-card>
+
+            </section>
+
+
+            <!-- ================= INSCRIPTION ================= -->
+            <section id="inscription" hidden>
+
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>
+                            Créer un compte
+                        </ion-card-title>
+                    </ion-card-header>
+
+                    <ion-card-content>
+
+                        <ion-input
+                            id="nom"
+                            label="Nom"
+                            label-placement="floating">
+                        </ion-input>
+
+                        <ion-input
+                            id="prenom"
+                            label="Prénom"
+                            label-placement="floating">
+                        </ion-input>
+
+                        <ion-input
+                            id="age"
+                            type="number"
+                            label="Âge"
+                            label-placement="floating">
+                        </ion-input>
+
+                                                    
+                        <!-- Photo de profil -->
+                        <div class="photo-container">
+
+                            <ion-label>Photo de profil 📸</ion-label>
+
+                            <p>Prends une photo avec ton téléphone ou choisis une image.</p>
+
+                            <ion-button
+                                type="button"
+                                expand="block"
+                                id="btn-prendre-photo">
+                                📸 Ouvrir la caméra
+                            </ion-button>
+
+                            <!-- Zone de caméra -->
+                            <div id="zone-camera" hidden>
+
+                                <video
+                                    id="camera-video"
+                                    autoplay
+                                    playsinline
+                                    style="width:100%; max-width:350px; border-radius:12px;">
+                                </video>
+
+                                <ion-button
+                                    type="button"
+                                    id="btn-capturer-photo"
+                                    expand="block">
+                                    Prendre la photo
+                                </ion-button>
+
+                                <ion-button
+                                    type="button"
+                                    id="btn-fermer-camera"
+                                    expand="block"
+                                    fill="outline">
+                                    Fermer la caméra
+                                </ion-button>
+
+                            </div>
+
+                            <!-- Choisir une photo depuis les fichiers -->
+                            <input
+                                type="file"
+                                id="photo-inscription"
+                                accept="image/*">
+
+                            <!-- Aperçu de la photo sélectionnée ou capturée -->
+                            <img
+                                id="apercu-photo"
+                                alt="Aperçu de la photo"
+                                hidden
+                                style="width:130px;
+                                    height:130px;
+                                    object-fit:cover;
+                                    border-radius:50%;
+                                    border:2px solid #0054e9;
+                                    margin:15px auto;"
+                            >
+
+                        </div>
+
+
+
+
+                        <ion-input
+                            id="email-inscription"
+                            type="email"
+                            label="Email"
+                            label-placement="floating">
+                        </ion-input>
+
+                        <ion-input
+                            id="mdp-inscription"
+                            type="password"
+                            label="Mot de passe"
+                            label-placement="floating">
+                        </ion-input>
+
+                        <ion-button
+                            id="btn-creer-compte"
+                            expand="block">
+                            S'inscrire
+                        </ion-button>
+
+                        <ion-button
+                            id="btn-retour-inscription"
+                            expand="block"
+                            fill="clear">
+                            Retour
+                        </ion-button>
+
+                    </ion-card-content>
+                </ion-card>
+
+            </section>
+
+
+            <!-- ================= CATALOGUE ================= -->
+            <section id="catalogue" hidden>
+
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>
+                            Catalogue des films 🎬
+                        </ion-card-title>
+                    </ion-card-header>
+
+                    <ion-card-content>
+
+                        <ion-searchbar
+                            id="recherche-film"
+                            placeholder="Rechercher un film..."
+                            debounce="500">
+                        </ion-searchbar>
+
+                        <p id="message-catalogue">
+                            Chargement des films...
+                        </p>
+
+                        <div id="liste-films"></div>
+
+                                                    
+                            <!-- Actions réservées aux utilisateurs connectés -->
+                            <div id="actions-utilisateur" hidden>
+
+                                <ion-button id="btn-mon-profil" expand="block">
+                                    👤 Mon profil
+                                </ion-button>
+
+                                <ion-button id="btn-mes-favoris" expand="block">
+                                    ❤️ Mes favoris
+                                </ion-button>
+
+                                <ion-button
+                                    id="btn-deconnexion"
+                                    expand="block"
+                                    color="danger">
+                                    Se déconnecter
+                                </ion-button>
+
+                            </div>
+
+
+                        <ion-button
+                            id="btn-retour-catalogue"
+                            expand="block"
+                            fill="clear">
+                            Retour à l'accueil
+                        </ion-button>
+
+                    </ion-card-content>
+                </ion-card>
+
+            </section>
+
+
+            <!-- ================= MES FAVORIS ================= -->
+            <section id="page-favoris" hidden>
+
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>
+                            Mes films favoris ❤️
+                        </ion-card-title>
+                    </ion-card-header>
+
+                    <ion-card-content>
+
+                        <p id="message-favoris"></p>
+
+                        <div id="liste-favoris"></div>
+
+                        <ion-button
+                            id="btn-retour-favoris"
+                            expand="block"
+                            fill="clear">
+                            Retour au catalogue
+                        </ion-button>
+
+                    </ion-card-content>
+                </ion-card>
+
+            </section>
+
+
+            <!-- ================= MON PROFIL ================= -->
+            <section id="page-profil" hidden>
+
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>
+                            Mon profil 👤
+                        </ion-card-title>
+
+                        <ion-card-subtitle>
+                            Informations de mon compte
+                        </ion-card-subtitle>
+                    </ion-card-header>
+
+                    <ion-card-content>
+
+                        <ion-avatar
+                            style="margin: 0 auto 20px;">
+                            <img
+                                id="photo-profil"
+                                alt="Photo de profil"
+                                src="https://ionicframework.com/docs/img/demos/avatar.svg">
+                        </ion-avatar>
+
+                        <ion-list>
+
+                            <ion-item>
+                                <ion-label>
+                                    <h3>Nom</h3>
+                                    <p id="profil-nom"></p>
+                                </ion-label>
+                            </ion-item>
+
+                            <ion-item>
+                                <ion-label>
+                                    <h3>Prénom</h3>
+                                    <p id="profil-prenom"></p>
+                                </ion-label>
+                            </ion-item>
+
+                            <ion-item>
+                                <ion-label>
+                                    <h3>Âge</h3>
+                                    <p id="profil-age"></p>
+                                </ion-label>
+                            </ion-item>
+
+                            <ion-item>
+                                <ion-label>
+                                    <h3>Email</h3>
+                                    <p id="profil-email"></p>
+                                </ion-label>
+                            </ion-item>
+
+                        </ion-list>
+
+                        <ion-button
+                            id="btn-retour-profil"
+                            expand="block"
+                            fill="clear">
+                            Retour au catalogue
+                        </ion-button>
+
+                    </ion-card-content>
+                </ion-card>
+
+            </section>
+
+        </ion-content>
+
+    </ion-app>
+
+    <!-- JavaScript du projet -->
+    <script type="module" src="script.js"></script>
+
+</body>
+</html>
