@@ -1,0 +1,26 @@
+{
+  "name": "moviematch-project",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "firebase-config.js",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "cap:sync": "npm run build && cap sync",
+    "cap:android": "npm run build && cap sync android"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/camera": "^7.0.5",
+    "@capacitor/core": "^7.6.9"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.9",
+    "vite": "^5.4.21"
+  }
+}

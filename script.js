@@ -1,4 +1,14 @@
-import { auth, db } from "./firebase-config.js";
+
+import { auth, db, storage } from "./firebase-config.js";
+
+import {
+  Camera,
+  CameraResultType,
+  CameraSource
+} from "@capacitor/camera";
+
+
+import { Capacitor } from "@capacitor/core";
 
 import {
   createUserWithEmailAndPassword,
@@ -15,12 +25,26 @@ import {
   collection,
   getDocs,
   deleteDoc,
-  serverTimestamp
+  serverTimestamp,
+  query,
+  where
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
+
 // =====================================================
-// 1. ELEMENTS HTML
+// 1. ÉLÉMENTS HTML
 // =====================================================
+
+const pageMatching = document.getElementById("page-matching");
+const btnMatching = document.getElementById("btn-matching");
+const btnRetourMatching = document.getElementById("btn-retour-matching");
+const listeMatching = document.getElementById("liste-matching");
+const messageMatching = document.getElementById("message-matching");
 
 const accueil = document.getElementById("accueil");
 const connexion = document.getElementById("connexion");
@@ -147,7 +171,7 @@ function mettreAJourActionsUtilisateur() {
   }
 }
 
-// Firebase restaure automatiquement la session.
+// Restaurer automatiquement la session Firebase.
 onAuthStateChanged(auth, async (user) => {
   utilisateurConnecte = user;
   profilConnecte = null;
@@ -183,10 +207,12 @@ onAuthStateChanged(auth, async (user) => {
 // =====================================================
 
 function afficherPage(page) {
-  if (page === pageFavoris || page === pageProfil) {
-    if (!verifierConnexion()) {
-      return;
-    }
+  if (
+    page === pageFavoris ||
+    page === pageProfil ||
+    page === pageMatching
+  ) {
+    if (!verifierConnexion()) return;
   }
 
   [
@@ -195,7 +221,8 @@ function afficherPage(page) {
     inscription,
     catalogue,
     pageFavoris,
-    pageProfil
+    pageProfil,
+    pageMatching
   ].forEach((element) => {
     if (element) {
       element.hidden = true;
@@ -266,7 +293,7 @@ document
   });
 
 // =====================================================
-// 5. PHOTO DE PROFIL ET CAMERA
+// 5. PHOTO DE PROFIL ET CAMÉRA
 // =====================================================
 
 function afficherApercuPhoto(source) {
@@ -300,7 +327,51 @@ function fermerCamera() {
   }
 }
 
+// Prendre une photo lors de l'inscription.
 btnPrendrePhoto?.addEventListener("click", async () => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 72,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera
+      });
+
+      if (!photo.dataUrl) {
+        afficherNotification(
+          "La caméra n'a pas renvoyé de photo.",
+          "warning"
+        );
+        return;
+      }
+
+      photoSelectionnee = photo.dataUrl;
+      afficherApercuPhoto(photoSelectionnee);
+
+      afficherNotification(
+        "Photo capturée avec succès !",
+        "success"
+      );
+    } catch (erreur) {
+      if (
+        erreur instanceof Error &&
+        erreur.message === "User cancelled photos app"
+      ) {
+        return;
+      }
+
+      console.error("Erreur caméra native :", erreur);
+
+      afficherNotification(
+        "Impossible d'ouvrir la caméra. Vérifie les autorisations de l'application.",
+        "danger"
+      );
+    }
+
+    return;
+  }
+
   if (
     !navigator.mediaDevices ||
     !navigator.mediaDevices.getUserMedia
@@ -350,27 +421,19 @@ btnPrendrePhoto?.addEventListener("click", async () => {
 btnCapturerPhoto?.addEventListener("click", () => {
   if (!cameraVideo?.videoWidth || !cameraVideo?.videoHeight) {
     afficherNotification(
-      "Attends que la caméra soit prête.",
+      "La caméra n'est pas prête.",
       "warning"
     );
     return;
   }
 
   const canvas = document.createElement("canvas");
-  const tailleMax = 500;
-
-  const facteur = Math.min(
-    1,
-    tailleMax / Math.max(
-      cameraVideo.videoWidth,
-      cameraVideo.videoHeight
-    )
-  );
-
-  canvas.width = Math.round(cameraVideo.videoWidth * facteur);
-  canvas.height = Math.round(cameraVideo.videoHeight * facteur);
+  canvas.width = cameraVideo.videoWidth;
+  canvas.height = cameraVideo.videoHeight;
 
   const contexte = canvas.getContext("2d");
+
+  if (!contexte) return;
 
   contexte.drawImage(
     cameraVideo,
@@ -380,8 +443,7 @@ btnCapturerPhoto?.addEventListener("click", () => {
     canvas.height
   );
 
-  photoSelectionnee = canvas.toDataURL("image/jpeg", 0.72);
-
+  photoSelectionnee = canvas.toDataURL("image/jpeg", 0.85);
   afficherApercuPhoto(photoSelectionnee);
   fermerCamera();
 
@@ -393,56 +455,10 @@ btnCapturerPhoto?.addEventListener("click", () => {
 
 btnFermerCamera?.addEventListener("click", fermerCamera);
 
-photoInscription?.addEventListener("change", () => {
-  const fichier = photoInscription.files?.[0];
 
-  if (!fichier) return;
-
-  if (!fichier.type.startsWith("image/")) {
-    afficherNotification(
-      "Veuillez sélectionner une image valide.",
-      "warning"
-    );
-
-    photoInscription.value = "";
-    return;
-  }
-
-  if (fichier.size > 2 * 1024 * 1024) {
-    afficherNotification(
-      "La photo ne doit pas dépasser 2 Mo.",
-      "warning"
-    );
-
-    photoInscription.value = "";
-    return;
-  }
-
-  const lecteur = new FileReader();
-
-  lecteur.onload = (event) => {
-    photoSelectionnee = event.target.result;
-    afficherApercuPhoto(photoSelectionnee);
-
-    afficherNotification(
-      "Photo sélectionnée avec succès !",
-      "success"
-    );
-  };
-
-  lecteur.onerror = () => {
-    afficherNotification(
-      "Impossible de lire cette image.",
-      "danger"
-    );
-  };
-
-  lecteur.readAsDataURL(fichier);
-});
-
-// =====================================================
-// 6. INSCRIPTION FIREBASE
-// =====================================================
+ // =====================================================
+ // 6. INSCRIPTION FIREBASE
+ // =====================================================
 
 btnCreerCompte?.addEventListener("click", async () => {
   const nom =
@@ -504,7 +520,6 @@ btnCreerCompte?.addEventListener("click", async () => {
   let nouvelUtilisateur = null;
 
   try {
-    // 1. Création du compte dans Firebase Authentication.
     const resultat = await createUserWithEmailAndPassword(
       auth,
       email,
@@ -513,7 +528,6 @@ btnCreerCompte?.addEventListener("click", async () => {
 
     nouvelUtilisateur = resultat.user;
 
-    // 2. Création du profil dans Firestore.
     await setDoc(
       doc(db, "users", nouvelUtilisateur.uid),
       {
@@ -528,7 +542,6 @@ btnCreerCompte?.addEventListener("click", async () => {
       }
     );
 
-    // 3. Nettoyage des champs.
     fermerCamera();
     photoSelectionnee = "";
 
@@ -545,7 +558,6 @@ btnCreerCompte?.addEventListener("click", async () => {
       champMdpInscription.value = "";
     }
 
-    // 4. Déconnexion pour revenir au formulaire de connexion.
     await signOut(auth);
 
     const champEmail = document.getElementById("email");
@@ -560,11 +572,10 @@ btnCreerCompte?.addEventListener("click", async () => {
       `Inscription réussie ! Bienvenue ${prenom} !`,
       "success"
     );
+
   } catch (erreur) {
     console.error("Erreur lors de l'inscription :", erreur);
 
-    // Nettoyer le compte si sa création a réussi,
-    // mais que l'enregistrement du profil a échoué.
     if (
       nouvelUtilisateur &&
       auth.currentUser?.uid === nouvelUtilisateur.uid
@@ -587,10 +598,7 @@ btnCreerCompte?.addEventListener("click", async () => {
       message = "L'adresse e-mail est invalide.";
     } else if (erreur.code === "auth/weak-password") {
       message = "Le mot de passe doit contenir au moins 6 caractères.";
-    } else if (
-      erreur.code === "permission-denied" ||
-      erreur.code === "firestore/permission-denied"
-    ) {
+    } else if (erreur.code === "permission-denied") {
       message = "Accès Firestore refusé. Vérifie les règles de sécurité.";
     } else if (erreur.code === "auth/network-request-failed") {
       message = "Erreur réseau. Vérifie ta connexion Internet.";
@@ -600,9 +608,10 @@ btnCreerCompte?.addEventListener("click", async () => {
   }
 });
 
-// =====================================================
-// 7. CONNEXION FIREBASE — CORRECTION PRINCIPALE
-// =====================================================
+
+ // =====================================================
+ // 7. CONNEXION FIREBASE
+ // =====================================================
 
 btnLogin?.addEventListener("click", async () => {
   const email =
@@ -620,7 +629,6 @@ btnLogin?.addEventListener("click", async () => {
   }
 
   try {
-    // Vérification des identifiants par Firebase Authentication.
     const resultat = await signInWithEmailAndPassword(
       auth,
       email,
@@ -628,8 +636,6 @@ btnLogin?.addEventListener("click", async () => {
     );
 
     const user = resultat.user;
-
-    // Récupération du profil Firestore.
     const profil = await chargerProfilFirebase(user);
 
     if (!profil) {
@@ -670,6 +676,7 @@ btnLogin?.addEventListener("click", async () => {
       `Connexion réussie ! Bienvenue ${profil.prenom || ""} !`,
       "success"
     );
+
   } catch (erreur) {
     console.error("Erreur de connexion Firebase :", erreur);
 
@@ -687,10 +694,7 @@ btnLogin?.addEventListener("click", async () => {
       message = "Trop de tentatives. Réessaie plus tard.";
     } else if (erreur.code === "auth/network-request-failed") {
       message = "Erreur réseau. Vérifie ta connexion Internet.";
-    } else if (
-      erreur.code === "permission-denied" ||
-      erreur.code === "firestore/permission-denied"
-    ) {
+    } else if (erreur.code === "permission-denied") {
       message =
         "Connexion effectuée, mais accès au profil Firestore refusé.";
     }
@@ -699,11 +703,13 @@ btnLogin?.addEventListener("click", async () => {
   }
 });
 
-// =====================================================
-// 8. CATALOGUE TMDB
-// =====================================================
 
-// Conserve ici ta clé TMDB actuelle.
+
+ // =====================================================
+ // 8. CATALOGUE TMDB
+ // =====================================================
+
+// Conserve ta clé API TMDB actuelle.
 const cleAPI = "8f3b7f30960bb2d7c063a5173362278c";
 
 async function chargerFilms(titre = "") {
@@ -753,14 +759,11 @@ async function chargerFilms(titre = "") {
 
       if (film.poster_path) {
         const image = document.createElement("img");
-
         image.src =
           "https://image.tmdb.org/t/p/w500" +
           film.poster_path;
-
         image.alt = "Affiche de " + film.title;
         image.loading = "lazy";
-
         carte.appendChild(image);
       }
 
@@ -775,7 +778,6 @@ async function chargerFilms(titre = "") {
         "⭐ " + Number(film.vote_average || 0).toFixed(1) + "/10";
 
       const btnFavori = document.createElement("ion-button");
-
       btnFavori.setAttribute("expand", "block");
       btnFavori.setAttribute("fill", "outline");
       btnFavori.textContent = "❤️ Ajouter aux favoris";
@@ -788,6 +790,7 @@ async function chargerFilms(titre = "") {
       carte.appendChild(informations);
       listeFilms.appendChild(carte);
     });
+
   } catch (erreur) {
     console.error("Erreur TMDB :", erreur);
 
@@ -805,9 +808,10 @@ rechercheFilm?.addEventListener("ionInput", (event) => {
   chargerFilms(event.detail.value || "");
 });
 
-// =====================================================
-// 9. FAVORIS DANS FIRESTORE
-// =====================================================
+
+ // =====================================================
+ // 9. FAVORIS DANS FIRESTORE
+ // =====================================================
 
 function convertirFilm(film) {
   return {
@@ -854,6 +858,7 @@ async function ajouterFavori(filmTMDB) {
       `${film.titre} ajouté aux favoris !`,
       "success"
     );
+
   } catch (erreur) {
     console.error("Erreur d'ajout aux favoris :", erreur);
 
@@ -908,13 +913,10 @@ async function afficherMesFavoris() {
 
       if (film.affiche) {
         const image = document.createElement("img");
-
         image.src =
           "https://image.tmdb.org/t/p/w500" + film.affiche;
-
         image.alt = "Affiche de " + film.titre;
         image.loading = "lazy";
-
         carte.appendChild(image);
       }
 
@@ -943,6 +945,7 @@ async function afficherMesFavoris() {
       carte.appendChild(informations);
       listeFavoris.appendChild(carte);
     });
+
   } catch (erreur) {
     console.error("Erreur de lecture des favoris :", erreur);
 
@@ -978,6 +981,7 @@ async function supprimerFavori(idFilm) {
       "Film supprimé des favoris !",
       "success"
     );
+
   } catch (erreur) {
     console.error("Erreur de suppression :", erreur);
 
@@ -988,9 +992,305 @@ async function supprimerFavori(idFilm) {
   }
 }
 
-// =====================================================
-// 10. MON PROFIL
-// =====================================================
+
+
+
+ // =====================================================
+ // 10. MATCHING ENTRE UTILISATEURS
+ // Comparaison par titres des films favoris
+ // =====================================================
+
+function normaliserTitreFilm(titre) {
+  return String(titre || "")
+    .trim()
+    .toLocaleLowerCase("fr")
+    .replace(/\s+/g, " ");
+}
+
+async function obtenirFavorisUtilisateur(uid) {
+  const resultat = await getDocs(
+    collection(db, "users", uid, "favorites")
+  );
+
+  return new Set(
+    resultat.docs
+      .map((document) => {
+        const film = document.data();
+
+        return normaliserTitreFilm(
+          film.titre || film.title || ""
+        );
+      })
+      .filter(Boolean)
+  );
+}
+
+function calculerTauxMatching(favorisA, favorisB) {
+  const communs = [...favorisA].filter((titre) =>
+    favorisB.has(titre)
+  );
+
+  const union = new Set([...favorisA, ...favorisB]);
+
+  return {
+    taux: union.size === 0
+      ? 0
+      : (communs.length / union.size) * 100,
+    communs
+  };
+}
+
+async function synchroniserProfilMatching(shareMatching) {
+  const uid = utilisateurConnecte.uid;
+  const titresFavoris = await obtenirFavorisUtilisateur(uid);
+
+  await setDoc(
+    doc(db, "matchingProfiles", uid),
+    {
+      prenom: profilConnecte.prenom || "Utilisateur",
+      nom: profilConnecte.nom || "",
+      favoriteTitles: [...titresFavoris],
+      shareMatching
+    }
+  );
+
+  return titresFavoris;
+}
+
+async function afficherMatching() {
+  if (!verifierConnexion()) return;
+
+  afficherPage(pageMatching);
+
+  listeMatching.innerHTML = "";
+  messageMatching.textContent = "Recherche des Matchs...";
+
+  try {
+    const uidConnecte = utilisateurConnecte.uid;
+
+    const referenceProfil = doc(
+      db,
+      "matchingProfiles",
+      uidConnecte
+    );
+
+    const profilExistant = await getDoc(referenceProfil);
+
+    let participer;
+
+    if (
+      profilExistant.exists() &&
+      profilExistant.data().shareMatching === true
+    ) {
+      participer = true;
+    } else {
+      participer = window.confirm(
+        "Souhaites-tu participer au Matching ? " +
+        "Ton prénom, ton nom et les titres de tes films favoris " +
+        "seront partagés avec les autres participants."
+      );
+    }
+
+    const mesFavoris =
+      await synchroniserProfilMatching(participer);
+
+    if (!participer) {
+      listeMatching.innerHTML = "";
+      messageMatching.textContent =
+        "Tu ne participes pas au Matching.";
+      return;
+    }
+
+    if (mesFavoris.size === 0) {
+      messageMatching.textContent =
+        "Ajoute des films à tes favoris pour trouver des Matchs.";
+      return;
+    }
+
+    const requete = query(
+      collection(db, "matchingProfiles"),
+      where("shareMatching", "==", true)
+    );
+
+    const resultatProfils = await getDocs(requete);
+    const compatibles = [];
+
+    for (const documentProfil of resultatProfils.docs) {
+      if (documentProfil.id === uidConnecte) continue;
+
+      const profil = documentProfil.data();
+
+      const favorisAutre = new Set(
+        (profil.favoriteTitles || [])
+          .map(normaliserTitreFilm)
+          .filter(Boolean)
+      );
+
+      if (favorisAutre.size === 0) continue;
+
+      const resultat = calculerTauxMatching(
+        mesFavoris,
+        favorisAutre
+      );
+
+      if (resultat.communs.length > 0) {
+        compatibles.push({
+          prenom: profil.prenom || "Utilisateur",
+          nom: profil.nom || "",
+          taux: resultat.taux,
+          filmsCommuns: resultat.communs
+        });
+      }
+    }
+
+    compatibles.sort((a, b) => b.taux - a.taux);
+    listeMatching.innerHTML = "";
+
+    if (compatibles.length === 0) {
+      messageMatching.textContent =
+        "Aucun autre participant n'a de film en commun pour le moment.";
+      return;
+    }
+
+    messageMatching.textContent =
+      `${compatibles.length} utilisateur(s) trouvé(s) !`;
+
+    compatibles.forEach((utilisateur) => {
+      const carte = document.createElement("ion-card");
+      const contenu = document.createElement("ion-card-content");
+      const nom = document.createElement("h2");
+      const taux = document.createElement("p");
+      const communs = document.createElement("p");
+
+      nom.textContent =
+        `${utilisateur.prenom} ${utilisateur.nom}`.trim();
+
+      taux.textContent =
+        `❤️ ${utilisateur.taux.toFixed(1)} % de compatibilité`;
+
+      communs.textContent =
+        "🎬 Films en commun : " +
+        utilisateur.filmsCommuns.join(", ");
+
+      contenu.append(nom, taux, communs);
+      carte.appendChild(contenu);
+      listeMatching.appendChild(carte);
+    });
+
+  } catch (erreur) {
+    console.error("Erreur lors du matching :", {
+      code: erreur.code,
+      message: erreur.message,
+      stack: erreur.stack
+    });
+
+    messageMatching.textContent =
+      "Erreur Firestore : " +
+      (erreur.code || erreur.message);
+
+    afficherNotification(
+      "Erreur Firestore : " +
+      (erreur.code || erreur.message),
+      "danger"
+    );
+  }
+}
+
+btnMatching?.addEventListener("click", afficherMatching);
+
+btnRetourMatching?.addEventListener("click", () => {
+  afficherPage(catalogue);
+});
+
+ 
+ 
+ // =====================================================
+ // 11. MON PROFIL
+ // =====================================================
+
+async function changerPhotoProfil() {
+  if (!verifierConnexion()) return;
+
+  try {
+    const photo = await Camera.getPhoto({
+      quality: 80,
+      allowEditing: true,
+      resultType: CameraResultType.Uri,
+      source: CameraSource.Prompt,
+      width: 600,
+      height: 600
+    });
+
+    if (!photo.webPath) {
+      throw new Error("Photo introuvable.");
+    }
+
+    // Convertir la photo en fichier Blob.
+    const reponse = await fetch(photo.webPath);
+    const fichierPhoto = await reponse.blob();
+
+    // Envoyer la photo vers Firebase Storage.
+    const cheminPhoto = ref(
+      storage,
+      `photos-profil/${utilisateurConnecte.uid}/photo-profil.jpg`
+    );
+
+    await uploadBytes(cheminPhoto, fichierPhoto, {
+      contentType: fichierPhoto.type || "image/jpeg"
+    });
+
+    // Récupérer l'URL de la photo.
+    const urlPhoto = await getDownloadURL(cheminPhoto);
+
+    // Enregistrer l'URL dans Firestore.
+    await setDoc(
+      doc(db, "users", utilisateurConnecte.uid),
+      { photo: urlPhoto },
+      { merge: true }
+    );
+
+    // Mettre à jour le profil en mémoire.
+    profilConnecte = {
+      ...profilConnecte,
+      photo: urlPhoto
+    };
+
+    // Afficher immédiatement la nouvelle photo.
+    const photoProfil = document.getElementById("photo-profil");
+
+    if (photoProfil) {
+      photoProfil.src = urlPhoto;
+    }
+
+    afficherNotification(
+      "Photo de profil mise à jour avec succès !",
+      "success"
+    );
+
+  } catch (erreur) {
+    if (
+      erreur.message?.toLowerCase().includes("cancel") ||
+      erreur.message?.toLowerCase().includes("cancelled")
+    ) {
+      return;
+    }
+
+    console.error(
+      "Erreur lors du changement de photo :",
+      erreur
+    );
+
+    afficherNotification(
+      "Impossible de modifier la photo. Vérifie Firebase Storage et les permissions.",
+      "danger"
+    );
+  }
+}
+
+
+// -----------------------------------------------------
+// AFFICHER LE PROFIL
+// -----------------------------------------------------
 
 async function afficherProfil() {
   if (!verifierConnexion()) return;
@@ -1001,12 +1301,16 @@ async function afficherProfil() {
     );
 
     if (!profil) {
-      afficherNotification("Profil introuvable.", "danger");
+      afficherNotification(
+        "Profil introuvable.",
+        "danger"
+      );
       return;
     }
 
     profilConnecte = profil;
 
+    // Afficher les informations personnelles.
     document.getElementById("profil-nom").textContent =
       profil.nom || "";
 
@@ -1019,6 +1323,7 @@ async function afficherProfil() {
     document.getElementById("profil-email").textContent =
       profil.email || utilisateurConnecte.email || "";
 
+    // Afficher la photo actuelle.
     const photoProfil =
       document.getElementById("photo-profil");
 
@@ -1026,9 +1331,99 @@ async function afficherProfil() {
       profil.photo ||
       "https://ionicframework.com/docs/img/demos/avatar.svg";
 
+    // -------------------------------------------------
+    // BOUTON : CHANGER MA PHOTO
+    // -------------------------------------------------
+
+    let btnChangerPhoto =
+      document.getElementById("btn-changer-photo");
+
+    if (!btnChangerPhoto) {
+      btnChangerPhoto =
+        document.createElement("ion-button");
+
+      btnChangerPhoto.id = "btn-changer-photo";
+      btnChangerPhoto.textContent = "Changer ma photo";
+
+      btnChangerPhoto.setAttribute("fill", "outline");
+      btnChangerPhoto.setAttribute("type", "button");
+
+      // Éviter la soumission accidentelle d'un formulaire.
+      btnChangerPhoto.addEventListener(
+        "click",
+        (event) => {
+          event.preventDefault();
+          changerPhotoProfil();
+        }
+      );
+    }
+
+    // Positionner le bouton sous l'avatar.
+    btnChangerPhoto.style.display = "flex";
+    btnChangerPhoto.style.width = "fit-content";
+    btnChangerPhoto.style.margin = "12px auto 20px";
+    btnChangerPhoto.style.position = "relative";
+    btnChangerPhoto.style.zIndex = "10";
+
+    const avatarProfil =
+      photoProfil.closest("ion-avatar");
+
+    if (avatarProfil) {
+      avatarProfil.insertAdjacentElement(
+        "afterend",
+        btnChangerPhoto
+      );
+    } else {
+      photoProfil.insertAdjacentElement(
+        "afterend",
+        btnChangerPhoto
+      );
+    }
+
+    // -------------------------------------------------
+    // BOUTON : MODIFIER MON PROFIL
+    // -------------------------------------------------
+
+    let btnModifierProfil =
+      document.getElementById("btn-modifier-profil");
+
+    if (!btnModifierProfil) {
+      btnModifierProfil =
+        document.createElement("ion-button");
+
+      btnModifierProfil.id = "btn-modifier-profil";
+      btnModifierProfil.textContent = "Modifier mon profil";
+
+      btnModifierProfil.setAttribute("expand", "block");
+      btnModifierProfil.setAttribute("color", "primary");
+      btnModifierProfil.setAttribute("type", "button");
+
+      const boutonRetour =
+        pageProfil.querySelector("#btn-retour-profil");
+
+      if (boutonRetour) {
+        boutonRetour.before(btnModifierProfil);
+      } else {
+        pageProfil.appendChild(btnModifierProfil);
+      }
+
+      btnModifierProfil.addEventListener(
+        "click",
+        (event) => {
+          event.preventDefault();
+          modifierProfil();
+        }
+      );
+    }
+
+    // Afficher la page du profil.
     afficherPage(pageProfil);
+
   } catch (erreur) {
-    console.error("Erreur de lecture du profil :", erreur);
+    console.error(
+      "Erreur de lecture du profil :",
+      erreur
+    );
 
     afficherNotification(
       "Impossible de charger le profil.",
@@ -1037,11 +1432,104 @@ async function afficherProfil() {
   }
 }
 
+
+// -----------------------------------------------------
+// OUVRIR MON PROFIL
+// -----------------------------------------------------
+
+btnMonProfil?.addEventListener(
+  "click",
+  afficherProfil
+);
+
+
+// Modifier le nom, le prénom et l'âge.
+async function modifierProfil() {
+  if (!verifierConnexion()) return;
+
+  try {
+    const nouveauNom = window.prompt(
+      "Entre ton nom :",
+      profilConnecte.nom || ""
+    );
+
+    if (nouveauNom === null) return;
+
+    const nouveauPrenom = window.prompt(
+      "Entre ton prénom :",
+      profilConnecte.prenom || ""
+    );
+
+    if (nouveauPrenom === null) return;
+
+    const nouvelAge = window.prompt(
+      "Entre ton âge :",
+      String(profilConnecte.age ?? "")
+    );
+
+    if (nouvelAge === null) return;
+
+    const nom = nouveauNom.trim();
+    const prenom = nouveauPrenom.trim();
+    const age = Number(nouvelAge);
+
+    if (!nom || !prenom) {
+      afficherNotification(
+        "Le nom et le prénom sont obligatoires.",
+        "warning"
+      );
+      return;
+    }
+
+    if (
+      nouvelAge.trim() === "" ||
+      !Number.isInteger(age) ||
+      age < 1 ||
+      age > 120
+    ) {
+      afficherNotification(
+        "Entre un âge valide entre 1 et 120.",
+        "warning"
+      );
+      return;
+    }
+
+    await setDoc(
+      doc(db, "users", utilisateurConnecte.uid),
+      { nom, prenom, age },
+      { merge: true }
+    );
+
+    profilConnecte = {
+      ...profilConnecte,
+      nom,
+      prenom,
+      age
+    };
+
+    afficherNotification(
+      "Profil modifié avec succès !",
+      "success"
+    );
+
+    await afficherProfil();
+
+  } catch (erreur) {
+    console.error("Erreur de modification du profil :", erreur);
+
+    afficherNotification(
+      "Impossible de modifier le profil.",
+      "danger"
+    );
+  }
+}
+
 btnMonProfil?.addEventListener("click", afficherProfil);
 
-// =====================================================
-// 11. DECONNEXION FIREBASE
-// =====================================================
+
+ // =====================================================
+ // 12. DÉCONNEXION FIREBASE
+ // =====================================================
 
 btnDeconnexion?.addEventListener("click", async () => {
   if (!utilisateurConnecte) {
@@ -1066,19 +1554,15 @@ btnDeconnexion?.addEventListener("click", async () => {
   ];
 
   document.body.appendChild(alerte);
-
   await alerte.present();
 
   const resultat = await alerte.onDidDismiss();
   alerte.remove();
 
-  if (resultat.role !== "confirm") {
-    return;
-  }
+  if (resultat.role !== "confirm") return;
 
   try {
     fermerCamera();
-
     await signOut(auth);
 
     utilisateurConnecte = null;
@@ -1090,6 +1574,7 @@ btnDeconnexion?.addEventListener("click", async () => {
       "Vous êtes déconnectée.",
       "success"
     );
+
   } catch (erreur) {
     console.error("Erreur de déconnexion :", erreur);
 
@@ -1101,7 +1586,7 @@ btnDeconnexion?.addEventListener("click", async () => {
 });
 
 // =====================================================
-// 12. INITIALISATION
+// 13. INITIALISATION
 // =====================================================
 
 if (actionsUtilisateur) {

@@ -291,6 +291,11 @@
                                     ❤️ Mes favoris
                                 </ion-button>
 
+                                <ion-button id="btn-matching" expand="block" color="tertiary">
+                                <ion-icon name="people-outline" slot="start"></ion-icon>
+                                        Trouver mes Matchs
+                                </ion-button>
+
                                 <ion-button
                                     id="btn-deconnexion"
                                     expand="block"
@@ -341,6 +346,36 @@
                 </ion-card>
 
             </section>
+
+            <!-- ================= MATCHING ================= -->
+<section id="page-matching" hidden>
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>
+        <ion-icon name="people-outline"></ion-icon>
+        Mes Matchs
+      </ion-card-title>
+      <ion-card-subtitle>
+        Des cinéphiles qui partagent tes goûts
+      </ion-card-subtitle>
+    </ion-card-header>
+
+    <ion-card-content>
+      <p id="message-matching">
+        Découvre les utilisateurs qui partagent tes films favoris.
+      </p>
+
+      <div id="liste-matching"></div>
+
+      <ion-button
+        id="btn-retour-matching"
+        expand="block"
+        fill="clear">
+        Retour au catalogue
+      </ion-button>
+    </ion-card-content>
+  </ion-card>
+</section>
 
 
             <!-- ================= MON PROFIL ================= -->
