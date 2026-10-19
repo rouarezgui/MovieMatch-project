@@ -170,6 +170,57 @@ ion-button[fill="outline"] {
     font-size: 12px;
 }
 
+#liste-films-admin {
+    display: grid;
+    gap: 12px;
+    margin: 16px 0;
+}
+
+.admin-film-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #383838;
+    border-radius: 10px;
+    background: #242424;
+}
+
+.admin-film-item > img {
+    width: 56px;
+    height: 84px;
+    flex: 0 0 auto;
+    border-radius: 6px;
+    object-fit: cover;
+    background: #303030;
+}
+
+.admin-film-details {
+    min-width: 0;
+    flex: 1;
+}
+
+.admin-film-details h3 {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.admin-film-details p {
+    color: #c9c9c9;
+}
+
+.admin-film-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+#formulaire-modification-film {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #484848;
+}
+
 /* ==========================================
    5. RECHERCHE ET MESSAGES
 ========================================== */
@@ -198,6 +249,13 @@ ion-searchbar {
     margin: 22px 0;
 }
 
+.photo-container > label {
+    display: block;
+    margin-bottom: 8px;
+    color: #ffffff;
+    font-weight: 600;
+}
+
 .photo-container ion-label {
     display: block;
     margin-bottom: 8px;
@@ -221,6 +279,26 @@ ion-searchbar {
     background: #292929;
     border: 1px solid #454545;
     border-radius: 8px;
+}
+
+#film-photo-affiche {
+    display: block;
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px;
+    color: #eeeeee;
+    background: #292929;
+    border: 1px solid #454545;
+    border-radius: 8px;
+}
+
+#apercu-affiche-film {
+    display: block;
+    max-width: 180px;
+    max-height: 270px;
+    margin: 16px auto;
+    border-radius: 8px;
+    object-fit: contain;
 }
 
 .apercu-container {

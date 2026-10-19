@@ -291,6 +291,15 @@
                                     ❤️ Mes favoris
                                 </ion-button>
 
+
+                                <ion-button
+                                    id="btn-movie-matching"
+                                    expand="block"
+                                    color="tertiary">
+                                    💞 Movie Matching
+                                </ion-button>
+
+
                                 <!-- Admin config -->
                                 <ion-button id="btn-admin" expand="block" color="warning" hidden>
                                      Espace administrateur
@@ -347,6 +356,44 @@
 
             </section>
 
+       
+<!-- ================= MOVIE MATCHING ================= -->
+<section id="page-matching" hidden>
+    <ion-card>
+        <ion-card-header>
+            <ion-card-title>
+                💞 Movie Matching
+            </ion-card-title>
+            <ion-card-subtitle>
+                Découvre les utilisateurs qui partagent
+                tes goûts cinématographiques !
+            </ion-card-subtitle>
+        </ion-card-header>
+
+        <ion-card-content>
+            <p id="message-matching">
+                Clique sur le bouton pour rechercher
+                tes correspondances.
+            </p>
+
+            <div id="liste-matching"></div>
+
+            <ion-button
+                id="btn-relancer-matching"
+                expand="block"
+                color="tertiary">
+                🔎 Rechercher des matchs
+            </ion-button>
+
+            <ion-button
+                id="btn-retour-matching"
+                expand="block"
+                fill="clear">
+                Retour au catalogue
+            </ion-button>
+        </ion-card-content>
+    </ion-card>
+</section>
 
             <!-- ================= MON PROFIL ================= -->
             <section id="page-profil" hidden>
@@ -444,12 +491,64 @@
             <ion-input id="film-affiche" label="URL de l'affiche (facultatif)"
                        label-placement="floating"></ion-input>
 
+            <div class="photo-container">
+                <label for="film-photo-affiche">Ou choisir une photo depuis l'appareil</label>
+                <input id="film-photo-affiche" type="file" accept="image/*">
+                <img id="apercu-affiche-film" alt="Aperçu de l'affiche sélectionnée" hidden>
+            </div>
+
             <ion-textarea id="film-description" label="Description (facultatif)"
                           label-placement="floating"></ion-textarea>
 
             <ion-button id="btn-ajouter-film" expand="block">
                 + Ajouter le film
             </ion-button>
+        </ion-card-content>
+    </ion-card>
+
+    <!-- Gestion des films -->
+    <ion-card>
+        <ion-card-header>
+            <ion-card-title>Gérer les films 🎞️</ion-card-title>
+            <ion-card-subtitle>Modifie ou supprime les films du catalogue</ion-card-subtitle>
+        </ion-card-header>
+
+        <ion-card-content>
+            <p id="message-films-admin"></p>
+            <div id="liste-films-admin"></div>
+
+            <div id="formulaire-modification-film" hidden>
+                <h3>Modifier le film</h3>
+                <ion-input id="modifier-film-titre" label="Titre"
+                           label-placement="floating"></ion-input>
+                <ion-input id="modifier-film-annee" type="number" label="Année"
+                           label-placement="floating"></ion-input>
+                <ion-input id="modifier-film-genre" label="Genre"
+                           label-placement="floating"></ion-input>
+                <ion-input id="modifier-film-note" type="number" label="Note sur 10"
+                           label-placement="floating"></ion-input>
+                <ion-input id="modifier-film-affiche" label="URL de l'affiche (facultatif)"
+                           label-placement="floating"></ion-input>
+
+                <div class="photo-container">
+                    <label for="film-photo-affiche-modification">
+                        Ou choisir une nouvelle photo depuis l'appareil
+                    </label>
+                    <input id="film-photo-affiche-modification" type="file" accept="image/*">
+                    <img id="apercu-affiche-film-modification"
+                         alt="Aperçu de la nouvelle affiche" hidden>
+                </div>
+
+                <ion-textarea id="modifier-film-description"
+                              label="Description (facultatif)"
+                              label-placement="floating"></ion-textarea>
+                <ion-button id="btn-enregistrer-modification-film" expand="block">
+                    Enregistrer les modifications
+                </ion-button>
+                <ion-button id="btn-annuler-modification-film" expand="block" fill="clear">
+                    Annuler
+                </ion-button>
+            </div>
         </ion-card-content>
     </ion-card>
 

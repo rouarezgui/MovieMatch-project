@@ -1,5 +1,17 @@
 import { auth, db } from "./firebase-config.js";
-import { initAdmin, chargerUtilisateurs, lireFilmsAjoutes } from "./admin.js";
+import {
+  initAdmin,
+  chargerUtilisateurs,
+  chargerFilmsAdmin,
+  lireFilmsCatalogueFirebase,
+  synchroniserFilmsTMDB
+} from "./admin.js";
+import { Capacitor } from "@capacitor/core";
+import {
+  Camera,
+  CameraResultType,
+  CameraSource
+} from "@capacitor/camera"; 
 
 import {
   createUserWithEmailAndPassword,
@@ -28,6 +40,7 @@ const connexion = document.getElementById("connexion");
 const inscription = document.getElementById("inscription");
 const catalogue = document.getElementById("catalogue");
 const pageFavoris = document.getElementById("page-favoris");
+const pageMatching = document.getElementById("page-matching");
 const pageProfil = document.getElementById("page-profil");
 const pageAdmin = document.getElementById("page-admin");
 const btnAdmin = document.getElementById("btn-admin");
@@ -40,6 +53,7 @@ const btnFilms = document.getElementById("btn-films");
 const btnCreerCompte = document.getElementById("btn-creer-compte");
 const btnLogin = document.getElementById("btn-login");
 const btnMesFavoris = document.getElementById("btn-mes-favoris");
+const btnMovieMatching = document.getElementById("btn-movie-matching");
 const btnMonProfil = document.getElementById("btn-mon-profil");
 const btnDeconnexion = document.getElementById("btn-deconnexion");
 
@@ -143,6 +157,8 @@ function verifierConnexion() {
 }
 
 function mettreAJourActionsUtilisateur() {
+  const compteAdmin = estAdmin();
+
   if (actionsUtilisateur) {
     actionsUtilisateur.hidden = !(
       utilisateurConnecte &&
@@ -152,9 +168,17 @@ function mettreAJourActionsUtilisateur() {
     );
   }
 
+  if (btnMesFavoris) {
+    btnMesFavoris.hidden = compteAdmin;
+  }
+
+  if (btnMovieMatching) {
+    btnMovieMatching.hidden = compteAdmin;
+  }
+
   // Le bouton admin n'apparaît que pour un administrateur
   if (btnAdmin) {
-    btnAdmin.hidden = !estAdmin();
+    btnAdmin.hidden = !compteAdmin;
   }
 }
 
@@ -193,9 +217,27 @@ onAuthStateChanged(auth, async (user) => {
 // 4. NAVIGATION
 // =====================================================
 
+
 function afficherPage(page) {
-  if (page === pageFavoris || page === pageProfil) {
+  // Vérifier la connexion pour les pages privées
+  if (
+    page === pageFavoris ||
+    page === pageMatching ||
+    page === pageProfil
+  ) {
     if (!verifierConnexion()) {
+      return;
+    }
+
+    if (
+      estAdmin() &&
+      (page === pageFavoris || page === pageMatching)
+    ) {
+      afficherNotification(
+        "Les favoris et Movie Matching sont réservés aux comptes utilisateur.",
+        "warning"
+      );
+      afficherPage(catalogue);
       return;
     }
   }
@@ -207,17 +249,22 @@ function afficherPage(page) {
     }
 
     if (!estAdmin()) {
-      afficherNotification("Accès réservé aux administrateurs.", "danger");
+      afficherNotification(
+        "Accès réservé aux administrateurs.",
+        "danger"
+      );
       return;
     }
   }
 
+  // Masquer toutes les pages
   [
     accueil,
     connexion,
     inscription,
     catalogue,
     pageFavoris,
+    pageMatching,
     pageProfil,
     pageAdmin
   ].forEach((element) => {
@@ -226,6 +273,7 @@ function afficherPage(page) {
     }
   });
 
+  // Afficher la page demandée
   if (page) {
     page.hidden = false;
   }
@@ -294,6 +342,7 @@ btnAdmin?.addEventListener("click", async () => {
 
   if (estAdmin()) {
     await chargerUtilisateurs();
+    await chargerFilmsAdmin();
   }
 });
 
@@ -340,7 +389,52 @@ function fermerCamera() {
   }
 }
 
+
 btnPrendrePhoto?.addEventListener("click", async () => {
+  // Android / iOS : caméra native avec Capacitor
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 70,
+        width: 500,
+        height: 500,
+        allowEditing: true,
+        correctOrientation: true,
+        source: CameraSource.Camera,
+        resultType: CameraResultType.DataUrl
+      });
+
+      if (!photo.dataUrl) {
+        throw new Error("Aucune image retournée par la caméra.");
+      }
+
+      photoSelectionnee = photo.dataUrl;
+      afficherApercuPhoto(photoSelectionnee);
+
+      afficherNotification(
+        "Photo capturée avec succès !",
+        "success"
+      );
+    } catch (erreur) {
+      console.error("Erreur caméra native :", erreur);
+
+      if (
+        erreur.message?.toLowerCase().includes("cancel") ||
+        erreur.message?.toLowerCase().includes("cancelled")
+      ) {
+        return;
+      }
+
+      afficherNotification(
+        "Impossible de prendre la photo. Vérifie les autorisations de la caméra.",
+        "danger"
+      );
+    }
+
+    return;
+  }
+
+  // Navigateur Web : conserver getUserMedia()
   if (
     !navigator.mediaDevices ||
     !navigator.mediaDevices.getUserMedia
@@ -365,7 +459,7 @@ btnPrendrePhoto?.addEventListener("click", async () => {
 
     await cameraVideo.play();
   } catch (erreur) {
-    console.error("Erreur caméra :", erreur);
+    console.error("Erreur caméra Web :", erreur);
     fermerCamera();
 
     if (erreur.name === "NotAllowedError") {
@@ -411,6 +505,14 @@ btnCapturerPhoto?.addEventListener("click", () => {
   canvas.height = Math.round(cameraVideo.videoHeight * facteur);
 
   const contexte = canvas.getContext("2d");
+
+  if (!contexte) {
+    afficherNotification(
+      "Impossible de traiter la photo.",
+      "danger"
+    );
+    return;
+  }
 
   contexte.drawImage(
     cameraVideo,
@@ -479,6 +581,7 @@ photoInscription?.addEventListener("change", () => {
 
   lecteur.readAsDataURL(fichier);
 });
+
 
 // =====================================================
 // 6. INSCRIPTION FIREBASE
@@ -745,11 +848,13 @@ btnLogin?.addEventListener("click", async () => {
 
 // Conserve ici ta clé TMDB actuelle.
 const cleAPI = "8f3b7f30960bb2d7c063a5173362278c";
+let numeroChargementFilms = 0;
+let temporisateurRechercheFilms = null;
 
-// Les films TMDB ont un chemin ("/abc.jpg"), ceux de l'admin une URL complète
+// Les affiches peuvent être des chemins TMDB, des URL ou des images locales.
 function urlAffiche(chemin) {
   if (!chemin) return "";
-  return chemin.startsWith("http")
+  return chemin.startsWith("http") || chemin.startsWith("data:image/")
     ? chemin
     : "https://image.tmdb.org/t/p/w500" + chemin;
 }
@@ -757,6 +862,7 @@ function urlAffiche(chemin) {
 async function chargerFilms(titre = "") {
   if (!listeFilms || !messageCatalogue) return;
 
+  const numeroChargement = ++numeroChargementFilms;
   listeFilms.innerHTML = "";
   messageCatalogue.textContent = "Chargement des films...";
 
@@ -783,8 +889,37 @@ async function chargerFilms(titre = "") {
     }
 
     const donnees = await reponse.json();
-    const filmsAdmin = await lireFilmsAjoutes(titre);
-    const films = [...filmsAdmin, ...(donnees.results || [])];
+    if (numeroChargement !== numeroChargementFilms) return;
+
+    const filmsFirebase = await lireFilmsCatalogueFirebase(titre);
+    let filmsTMDB = donnees.results || [];
+    let messageSauvegarde = "";
+
+    if (filmsTMDB.length && utilisateurConnecte) {
+      try {
+        filmsTMDB = await synchroniserFilmsTMDB(
+          filmsTMDB,
+          utilisateurConnecte.uid
+        );
+      } catch (erreurFirebase) {
+        console.error("Erreur de sauvegarde des films TMDB dans Firebase :", erreurFirebase);
+        messageSauvegarde = " Les films TMDB n'ont pas pu être sauvegardés dans Firebase.";
+        afficherNotification(
+          "Films affichés, mais leur sauvegarde dans Firebase a échoué.",
+          "warning"
+        );
+      }
+    } else if (filmsTMDB.length) {
+      messageSauvegarde = " Connectez-vous pour sauvegarder les films TMDB dans Firebase.";
+    }
+
+    if (numeroChargement !== numeroChargementFilms) return;
+
+    const films = [
+      ...new Map(
+        [...filmsFirebase, ...filmsTMDB].map((film) => [String(film.id), film])
+      ).values()
+    ];
 
     listeFilms.innerHTML = "";
 
@@ -794,7 +929,7 @@ async function chargerFilms(titre = "") {
     }
 
     messageCatalogue.textContent =
-      `${films.length} film(s) affiché(s)`;
+      `${films.length} film(s) affiché(s).${messageSauvegarde}`;
 
     films.forEach((film) => {
       const carte = document.createElement("div");
@@ -821,21 +956,23 @@ async function chargerFilms(titre = "") {
       note.textContent =
         "⭐ " + Number(film.vote_average || 0).toFixed(1) + "/10";
 
-      const btnFavori = document.createElement("ion-button");
+      informations.append(titreFilm, note);
 
-      btnFavori.setAttribute("expand", "block");
-      btnFavori.setAttribute("fill", "outline");
-      btnFavori.textContent = "❤️ Ajouter aux favoris";
+      if (!estAdmin()) {
+        const btnFavori = document.createElement("ion-button");
+        btnFavori.setAttribute("expand", "block");
+        btnFavori.setAttribute("fill", "outline");
+        btnFavori.textContent = "❤️ Ajouter aux favoris";
+        btnFavori.addEventListener("click", () => ajouterFavori(film));
+        informations.appendChild(btnFavori);
+      }
 
-      btnFavori.addEventListener("click", () => {
-        ajouterFavori(film);
-      });
-
-      informations.append(titreFilm, note, btnFavori);
       carte.appendChild(informations);
       listeFilms.appendChild(carte);
     });
   } catch (erreur) {
+    if (numeroChargement !== numeroChargementFilms) return;
+
     console.error("Erreur TMDB :", erreur);
 
     messageCatalogue.textContent =
@@ -849,7 +986,9 @@ async function chargerFilms(titre = "") {
 }
 
 rechercheFilm?.addEventListener("ionInput", (event) => {
-  chargerFilms(event.detail.value || "");
+  clearTimeout(temporisateurRechercheFilms);
+  const titre = event.detail.value || "";
+  temporisateurRechercheFilms = setTimeout(() => chargerFilms(titre), 350);
 });
 
 // =====================================================
@@ -866,6 +1005,14 @@ function convertirFilm(film) {
 }
 
 async function ajouterFavori(filmTMDB) {
+  if (estAdmin()) {
+    afficherNotification(
+      "Les favoris sont réservés aux comptes utilisateur.",
+      "warning"
+    );
+    return;
+  }
+
   if (!verifierConnexion()) return;
 
   const film = convertirFilm(filmTMDB);
@@ -928,6 +1075,14 @@ async function lireFavorisFirebase() {
 }
 
 async function afficherMesFavoris() {
+  if (estAdmin()) {
+    afficherNotification(
+      "Les favoris sont réservés aux comptes utilisateur.",
+      "warning"
+    );
+    return;
+  }
+
   if (!verifierConnexion()) return;
 
   listeFavoris.innerHTML = "";
@@ -1004,7 +1159,226 @@ async function afficherMesFavoris() {
 
 btnMesFavoris?.addEventListener("click", afficherMesFavoris);
 
+btnMovieMatching?.addEventListener("click", () => {
+  if (!verifierConnexion()) return;
+
+  afficherPage(pageMatching);
+});
+
+
+async function rechercherMatchs() {
+  if (estAdmin()) {
+    afficherNotification(
+      "Movie Matching est réservé aux comptes utilisateur.",
+      "warning"
+    );
+    return;
+  }
+
+  if (!verifierConnexion()) return;
+
+  const message = document.getElementById("message-matching");
+  const liste = document.getElementById("liste-matching");
+  const bouton = document.getElementById("btn-relancer-matching");
+
+  if (!message || !liste) {
+    console.error("Éléments HTML du matching introuvables.");
+    return;
+  }
+
+  try {
+    if (bouton) bouton.disabled = true;
+
+    message.textContent = "Recherche des matchs...";
+    liste.replaceChildren();
+
+    // 1. Lire les favoris de l'utilisateur connecté
+    const mesFavoris = await lireFavorisFirebase();
+    const mesIds = [
+      ...new Set(mesFavoris.map(film => String(film.documentId)))
+    ];
+
+    if (mesIds.length === 0) {
+      message.textContent =
+        "Ajoute des films à tes favoris avant de rechercher des matchs.";
+      return;
+    }
+
+    // 2. Synchroniser le profil de matching
+    await setDoc(
+      doc(db, "matchingProfiles", utilisateurConnecte.uid),
+      {
+        nomAffichage:
+          `${profilConnecte.prenom || ""} ${profilConnecte.nom || ""}`.trim()
+          || "Utilisateur MovieMatch",
+        favoriteIds: mesIds,
+        updatedAt: serverTimestamp()
+      }
+    );
+
+    // 3. Lire les profils de matching
+    const resultat = await getDocs(
+      collection(db, "matchingProfiles")
+    );
+
+    const matchs = [];
+
+    resultat.forEach(snapshot => {
+      if (snapshot.id === utilisateurConnecte.uid) return;
+
+      const profil = snapshot.data();
+      const idsAutres = Array.isArray(profil.favoriteIds)
+        ? [...new Set(profil.favoriteIds.map(String))]
+        : [];
+
+      if (idsAutres.length === 0) return;
+
+      const idsAutresSet = new Set(idsAutres);
+      const communs = mesIds.filter(id => idsAutresSet.has(id));
+      const union = new Set([...mesIds, ...idsAutres]);
+
+      const score = Math.round((communs.length / union.size) * 100);
+
+      
+if (score > 75) {
+  matchs.push({
+    nom: profil.nomAffichage || "Utilisateur MovieMatch",
+    score,
+    nombreCommuns: communs.length,
+    filmsCommuns: communs
+  });
+}
+
+    });
+
+    // 4. Trier du meilleur score au plus faible
+    matchs.sort((a, b) => b.score - a.score);
+
+    if (matchs.length === 0) {
+      message.textContent =
+        "Aucun match supérieur à 75 % pour le moment. " +
+        "Les autres utilisateurs doivent aussi rechercher leurs matchs.";
+      return;
+    }
+
+    
+    // 5. Afficher les résultats
+    message.textContent = `${matchs.length} match(s) trouvé(s) !`;
+    liste.replaceChildren();
+
+    if (matchs.length === 0) {
+      message.textContent = "Aucun match supérieur à 75 % pour le moment.";
+      return;
+    }
+
+    for (const match of matchs) {
+      const carte = document.createElement("ion-card");
+      const contenu = document.createElement("ion-card-content");
+
+      const nom = document.createElement("h2");
+      nom.textContent = `💞 ${match.nom}`;
+
+      const score = document.createElement("h3");
+      score.textContent = `${match.score} % de compatibilité`;
+
+      const progression = document.createElement("ion-progress-bar");
+      progression.value = match.score / 100;
+      progression.color = "success";
+
+      const resume = document.createElement("p");
+      resume.textContent = `${match.nombreCommuns} film(s) en commun`;
+
+      const titreSection = document.createElement("h3");
+      titreSection.textContent = "🎬 Films en commun";
+
+      const grille = document.createElement("div");
+      grille.style.display = "grid";
+      grille.style.gridTemplateColumns = "repeat(auto-fill, minmax(110px, 1fr))";
+      grille.style.gap = "12px";
+      grille.style.marginTop = "12px";
+
+      contenu.append(nom, score, progression, resume, titreSection, grille);
+      carte.appendChild(contenu);
+      liste.appendChild(carte);
+
+      // Récupérer les informations des films communs depuis TMDB
+      for (const filmId of (match.filmsCommuns || [])) {
+        const filmCarte = document.createElement("div");
+        const titreFilm = document.createElement("p");
+        titreFilm.textContent = "Chargement...";
+
+        filmCarte.appendChild(titreFilm);
+        grille.appendChild(filmCarte);
+
+        try {
+          const reponse = await fetch(
+            `https://api.themoviedb.org/3/movie/${encodeURIComponent(filmId)}?api_key=${encodeURIComponent(cleAPI)}&language=fr-FR`
+          );
+
+          if (!reponse.ok) {
+            throw new Error(`TMDB : ${reponse.status}`);
+          }
+
+          const film = await reponse.json();
+
+          titreFilm.textContent = film.title || "Film sans titre";
+
+          if (film.poster_path) {
+            const image = document.createElement("img");
+            image.src = urlAffiche(film.poster_path);
+            image.alt = `Affiche de ${film.title || "film"}`;
+            image.loading = "lazy";
+            image.style.width = "100%";
+            image.style.borderRadius = "8px";
+
+            filmCarte.insertBefore(image, titreFilm);
+          }
+        } catch (erreurFilm) {
+          console.error(`Erreur TMDB pour le film ${filmId}:`, erreurFilm);
+          titreFilm.textContent = `Film ${filmId}`;
+        }
+      }
+    }
+
+  } catch (erreur) {
+    console.error("Erreur Movie Matching :", erreur);
+
+    message.textContent =
+      "La recherche a échoué. Vérifie les règles Firestore et la console.";
+
+    afficherNotification(
+      "Impossible de rechercher les matchs.",
+      "danger"
+    );
+  } finally {
+    if (bouton) bouton.disabled = false;
+  }
+}
+
+// Connecter le bouton à la fonction
+document
+  .getElementById("btn-relancer-matching")
+  ?.addEventListener("click", rechercherMatchs);
+
+
+document
+  .getElementById("btn-retour-matching")
+  ?.addEventListener("click", () => {
+    if (verifierConnexion()) {
+      afficherPage(catalogue);
+    }
+  });
+
+
 async function supprimerFavori(idFilm) {
+  if (estAdmin()) {
+    afficherNotification(
+      "Les favoris sont réservés aux comptes utilisateur.",
+      "warning"
+    );
+    return;
+  }
+
   if (!verifierConnexion()) return;
 
   try {

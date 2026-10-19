@@ -1,22 +1,28 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // ---------- Fonctions utilitaires ----------
+
     function estConnecte() {
       return request.auth != null;
     }
 
-    function profilDe(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data;
-    }
-
     function profilExiste(uid) {
-      return exists(/databases/$(database)/documents/users/$(uid));
+      return exists(
+        /databases/$(database)/documents/users/$(uid)
+      );
     }
 
-    // Admin = rôle "admin" ET compte actif, lu dans Firestore
+    function profilDe(uid) {
+      return get(
+        /databases/$(database)/documents/users/$(uid)
+      ).data;
+    }
+
+    // Administrateur connecté et actif
     function estAdmin() {
       return estConnecte()
         && profilExiste(request.auth.uid)
@@ -24,71 +30,194 @@ service cloud.firestore {
         && profilDe(request.auth.uid).actif == true;
     }
 
+    // Utilisateur connecté et actif
     function estActif() {
       return estConnecte()
         && profilExiste(request.auth.uid)
         && profilDe(request.auth.uid).actif == true;
     }
 
+    function estUtilisateurActif() {
+      return estActif()
+        && profilDe(request.auth.uid).role == 'user';
+    }
+
+    function estFilmTMDBValide(movieId) {
+      return estActif()
+        && request.resource.data.keys().hasAll([
+          'id',
+          'tmdbId',
+          'source',
+          'titre',
+          'annee',
+          'genre',
+          'affiche',
+          'note',
+          'description',
+          'ajoutePar',
+          'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'id',
+          'tmdbId',
+          'source',
+          'titre',
+          'annee',
+          'genre',
+          'affiche',
+          'note',
+          'description',
+          'ajoutePar',
+          'createdAt'
+        ])
+        && request.resource.data.id is int
+        && request.resource.data.id > 0
+        && request.resource.data.tmdbId is string
+        && request.resource.data.tmdbId.matches('^[0-9]+$')
+        && movieId == 'tmdb_' + request.resource.data.tmdbId
+        && request.resource.data.source == 'tmdb'
+        && request.resource.data.titre is string
+        && request.resource.data.titre.size() > 0
+        && request.resource.data.titre.size() <= 200
+        && request.resource.data.annee is int
+        && request.resource.data.annee >= 0
+        && request.resource.data.genre == ''
+        && request.resource.data.affiche is string
+        && request.resource.data.affiche.size() <= 2048
+        && request.resource.data.note is number
+        && request.resource.data.note >= 0
+        && request.resource.data.note <= 10
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 5000
+        && request.resource.data.ajoutePar == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+    }
+
+
     // ---------- Profils utilisateurs ----------
+
     match /users/{userId} {
 
-      // Création du profil personnel (inchangé)
-      allow create: if request.auth != null
-                    && request.auth.uid == userId
-                    && request.resource.data.keys().hasAll([
-                      'nom', 'prenom', 'age', 'email',
-                      'photo', 'role', 'actif', 'createdAt'
-                    ])
-                    && request.resource.data.keys().hasOnly([
-                      'nom', 'prenom', 'age', 'email',
-                      'photo', 'role', 'actif', 'createdAt'
-                    ])
-                    && request.resource.data.role == 'user'
-                    && request.resource.data.actif == true
-                    && request.resource.data.email == request.auth.token.email;
+      // Création du profil personnel
+      allow create: if estConnecte()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll([
+          'nom',
+          'prenom',
+          'age',
+          'email',
+          'photo',
+          'role',
+          'actif',
+          'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'nom',
+          'prenom',
+          'age',
+          'email',
+          'photo',
+          'role',
+          'actif',
+          'createdAt'
+        ])
+        && request.resource.data.role == 'user'
+        && request.resource.data.actif == true
+        && request.resource.data.email == request.auth.token.email;
 
-      // Lecture : son propre profil, ou tous les profils si admin
+      // Lecture de son profil ou lecture par l'administrateur
       allow read: if estConnecte()
-                  && (request.auth.uid == userId || estAdmin());
+        && (
+          request.auth.uid == userId
+          || estAdmin()
+        );
 
-      allow update: if
-        // (a) l'utilisateur modifie ses infos perso (jamais role/actif)
-        (estConnecte()
-          && request.auth.uid == userId
-          && estActif()
-          && request.resource.data.diff(resource.data)
-             .affectedKeys().hasOnly(['nom', 'prenom', 'age', 'photo']))
-        ||
-        // (b) l'admin modifie UNIQUEMENT "actif" d'un simple utilisateur
-        (estAdmin()
-          && request.auth.uid != userId
-          && resource.data.role == 'user'
-          && request.resource.data.actif is bool
-          && request.resource.data.diff(resource.data)
-             .affectedKeys().hasOnly(['actif']));
+      // Mise à jour du profil personnel
+      // L'utilisateur ne peut modifier ni son rôle ni son statut
+      allow update: if (
+        estActif()
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            'nom',
+            'prenom',
+            'age',
+            'photo'
+          ])
+      ) || (
+        estAdmin()
+        && request.auth.uid != userId
+        && resource.data.role == 'user'
+        && request.resource.data.actif is bool
+        && request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly(['actif'])
+      );
 
-      // Jamais de suppression : on désactive
+      // Pas de suppression des profils utilisateurs
       allow delete: if false;
 
-      // Favoris personnels (réservés aux comptes actifs)
+
+      // ---------- Favoris personnels ----------
+
       match /favorites/{movieId} {
-        allow read, create, update, delete:
-          if estConnecte()
-          && request.auth.uid == userId
-          && estActif();
+
+        // Seuls les comptes utilisateur actifs accèdent à leurs favoris
+        allow read, create, update, delete: if estUtilisateurActif()
+          && request.auth.uid == userId;
       }
     }
 
+
+    // ---------- Profils de matching ----------
+
+    match /matchingProfiles/{userId} {
+
+      // Lecture des profils de matching par les utilisateurs actifs
+      allow read: if estUtilisateurActif();
+
+      // Création et mise à jour du profil de matching personnel
+      allow create, update: if estUtilisateurActif()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll([
+          'nomAffichage',
+          'favoriteIds',
+          'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'nomAffichage',
+          'favoriteIds',
+          'updatedAt'
+        ])
+        && request.resource.data.nomAffichage is string
+        && request.resource.data.nomAffichage.size() <= 100
+        && request.resource.data.favoriteIds is list
+        && request.resource.data.favoriteIds.size() <= 500
+        && request.resource.data.updatedAt == request.time;
+
+      // Suppression de son propre profil de matching
+      allow delete: if estUtilisateurActif()
+        && request.auth.uid == userId;
+    }
+
+
     // ---------- Catalogue des films ----------
+
     match /movies/{movieId} {
+
+      // Catalogue consultable par tous
       allow read: if true;
 
-      allow create: if estAdmin()
-                    && request.resource.data.titre is string
-                    && request.resource.data.titre.size() > 0
-                    && request.resource.data.titre.size() <= 200;
+      // Ajout réservé aux administrateurs
+      allow create: if (
+        estAdmin()
+        && request.resource.data.titre is string
+        && request.resource.data.titre.size() > 0
+        && request.resource.data.titre.size() <= 200
+      ) || estFilmTMDBValide(movieId);
 
+      // Modification et suppression réservées aux administrateurs
       allow update, delete: if estAdmin();
     }
   }
