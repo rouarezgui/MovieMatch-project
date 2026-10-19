@@ -1,13 +1,39 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Profils utilisateurs
+    // ---------- Fonctions utilitaires ----------
+    function estConnecte() {
+      return request.auth != null;
+    }
+
+    function profilDe(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function profilExiste(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    // Admin = rôle "admin" ET compte actif, lu dans Firestore
+    function estAdmin() {
+      return estConnecte()
+        && profilExiste(request.auth.uid)
+        && profilDe(request.auth.uid).role == 'admin'
+        && profilDe(request.auth.uid).actif == true;
+    }
+
+    function estActif() {
+      return estConnecte()
+        && profilExiste(request.auth.uid)
+        && profilDe(request.auth.uid).actif == true;
+    }
+
+    // ---------- Profils utilisateurs ----------
     match /users/{userId} {
 
-      // Création du profil personnel
+      // Création du profil personnel (inchangé)
       allow create: if request.auth != null
                     && request.auth.uid == userId
                     && request.resource.data.keys().hasAll([
@@ -22,35 +48,48 @@ service cloud.firestore {
                     && request.resource.data.actif == true
                     && request.resource.data.email == request.auth.token.email;
 
-      // Lecture de son propre profil
-      allow read: if request.auth != null
-                  && request.auth.uid == userId;
+      // Lecture : son propre profil, ou tous les profils si admin
+      allow read: if estConnecte()
+                  && (request.auth.uid == userId || estAdmin());
 
-      // Modification des informations personnelles uniquement
-      allow update: if request.auth != null
-                    && request.auth.uid == userId
-                    && request.resource.data.diff(resource.data)
-                       .affectedKeys()
-                       .hasOnly(['nom', 'prenom', 'age', 'photo']);
+      allow update: if
+        // (a) l'utilisateur modifie ses infos perso (jamais role/actif)
+        (estConnecte()
+          && request.auth.uid == userId
+          && estActif()
+          && request.resource.data.diff(resource.data)
+             .affectedKeys().hasOnly(['nom', 'prenom', 'age', 'photo']))
+        ||
+        // (b) l'admin modifie UNIQUEMENT "actif" d'un simple utilisateur
+        (estAdmin()
+          && request.auth.uid != userId
+          && resource.data.role == 'user'
+          && request.resource.data.actif is bool
+          && request.resource.data.diff(resource.data)
+             .affectedKeys().hasOnly(['actif']));
 
-      // Aucun utilisateur ne peut supprimer un profil
+      // Jamais de suppression : on désactive
       allow delete: if false;
 
-      // Favoris personnels
+      // Favoris personnels (réservés aux comptes actifs)
       match /favorites/{movieId} {
         allow read, create, update, delete:
-          if request.auth != null
-          && request.auth.uid == userId;
+          if estConnecte()
+          && request.auth.uid == userId
+          && estActif();
       }
     }
 
-    // Catalogue des films
+    // ---------- Catalogue des films ----------
     match /movies/{movieId} {
       allow read: if true;
 
-      // Écriture réservée aux administrateurs autorisés
-      allow write: if request.auth != null
-                   && request.auth.token.admin == true;
+      allow create: if estAdmin()
+                    && request.resource.data.titre is string
+                    && request.resource.data.titre.size() > 0
+                    && request.resource.data.titre.size() <= 200;
+
+      allow update, delete: if estAdmin();
     }
   }
 }
